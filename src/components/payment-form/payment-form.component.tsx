@@ -1,9 +1,8 @@
 import { useState, FormEvent } from 'react';
 import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { StripeCardElement } from '@stripe/stripe-js';
 import { useSelector } from 'react-redux';
 
-import { selectCartTotal } from '../../store/cart/cart.selector';
+import { selectCartItems, selectCartTotal } from '../../store/cart/cart.selector';
 import { selectCurrentUser } from '../../store/user/user.selector';
 
 import { BUTTON_TYPE_CLASSES } from '../button/button.component';
@@ -14,13 +13,10 @@ import {
   PaymentButton,
 } from './payment-form.styles';
 
-const ifValidCardElement = (
-  card: StripeCardElement | null
-): card is StripeCardElement => card !== null;
-
 const PaymentForm = () => {
   const stripe = useStripe();
   const elements = useElements();
+  const cartItems = useSelector(selectCartItems);
   const amount = useSelector(selectCartTotal);
   const currentUser = useSelector(selectCurrentUser);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -34,12 +30,17 @@ const PaymentForm = () => {
 
     setIsProcessingPayment(true);
 
-    const response = await fetch('/.netlify/functions/create-payment-intent', {
+    const lineItems = cartItems.map((item) => ({
+      price: item.price.id,
+      quantity: item.quantity,
+    }));
+
+    const response = await fetch('http://localhost:5000/create-checkout-session', {
       method: 'post',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ amount: amount * 100 }),
+      body: JSON.stringify({ amount: amount * 100, lineItems }),
     }).then((res) => res.json());
 
     const {
@@ -48,7 +49,7 @@ const PaymentForm = () => {
 
     const cardDetails = elements.getElement(CardElement);
 
-    if (!ifValidCardElement(cardDetails)) return;
+    if (!cardDetails) return;
 
     const paymentResult = await stripe.confirmCardPayment(client_secret, {
       payment_method: {
@@ -78,6 +79,7 @@ const PaymentForm = () => {
         <PaymentButton
           isLoading={isProcessingPayment}
           buttonType={BUTTON_TYPE_CLASSES.inverted}
+          type="submit"
         >
           Pay now
         </PaymentButton>
